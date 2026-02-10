@@ -6,3 +6,4 @@ DB_NAME = r'C:\Users\Aluno\Desktop\PauloH\api-rest\BANCO\BANCO.FDB'
 
 DB_USER = 'sysdba'
 DB_PASSWORD = 'sysdba'
+

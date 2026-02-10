@@ -1,5 +1,7 @@
 from flask import Flask, jsonify, request
+from funcao import *
 from main import app, con
+
 
 @app.route('/listar_livros', methods=['GET'])
 def listar_livro():
@@ -22,6 +24,7 @@ def listar_livro():
         return jsonify({"message": f"Erro ao consultar banco de dados {e}"}), 500
     finally:
         cur.close()
+
 
 @app.route('/criar_livro', methods=['POST'])
 def criar_livro():
@@ -48,11 +51,12 @@ def criar_livro():
                 "titulo": titulo,
                 "autor": autor,
                 "ano_publicacao": ano_publicacao
-        }}), 201
+            }}), 201
     except Exception as e:
         return jsonify({"error": f"Erro ao consultar banco de dados {e}"}), 500
     finally:
         cur.close()
+
 
 @app.route('/editar_livro/<int:id>', methods=['PUT'])
 def editar_livro(id):
@@ -65,7 +69,11 @@ def editar_livro(id):
         if not tem_livro:
             return jsonify({"error": "Livro nao encontrado"}), 404
 
-        data = request.get_json()
+        data = request.get_json(silent=True)
+
+        if not data:
+            return jsonify({"error": "Formato de requisicao invalido"}), 400
+
         titulo = data.get('titulo')
         autor = data.get('autor')
         ano_publicacao = data.get('ano_publicacao')
@@ -84,13 +92,14 @@ def editar_livro(id):
                 "autor": autor,
                 "ano_publicacao": ano_publicacao
             }
-        })
+        }), 200
     except Exception as e:
         return jsonify({
             "error": "Houve um erro ao editar livro"
         }), 500
     finally:
         cur.close()
+
 
 @app.route('/deletar_livro/<int:id>', methods=['DELETE'])
 def deletar_livro(id):
@@ -107,5 +116,156 @@ def deletar_livro(id):
         return jsonify({"message": "Livro deletado com sucesso", "id_livro": id})
     except Exception as e:
         return jsonify({"error": "Houve um erro ao excluir livro"})
+    finally:
+        cur.close()
+
+
+@app.route('/criar_usuario', methods=['POST'])
+def criar_usuario():
+    try:
+        cur = con.cursor()
+        data = request.get_json(silent=True)
+
+        if not data:
+            return jsonify({"error": "Formato de requisicao invalido"}), 400
+
+        # limpando email pra nao ficar feio no db
+        email = limpar_email(data.get('email'))
+        nome = data.get('nome')
+        senha = data.get('senha')
+
+        if not email or not senha or not nome:
+            return jsonify({"error": "Email, nome e senha são obrigatorios"}), 400
+
+        if not verificar_senha_forte(senha):
+            return jsonify({"error": "Senha fraca"}), 400
+
+        cur.execute("select 1 from usuario where email = ?", (email,))
+
+        if cur.fetchone():
+            return jsonify({"error": "Email ja cadastrado"}), 400
+
+        nome = nome.strip()
+        senha = senha.strip()
+
+        cur.execute("insert into usuario (email, nome, senha) values (?, ?, ?)",
+                    (email, nome, criptografar(senha)))
+
+        con.commit()
+
+        return jsonify({
+            "message": "Usuario cadastrado com sucesso",
+            "usuario": {
+                "email": email,
+                "nome": nome,
+            }
+        }), 201
+    except Exception as e:
+        return jsonify({"error": f"Houve um erro ao criar usuario {e}"}), 500
+    finally:
+        cur.close()
+
+
+@app.route('/editar_usuario/<int:id>', methods=['PUT'])
+def editar_usuario(id):
+    try:
+        cur = con.cursor()
+        cur.execute("select id_usuario, email, nome, senha from usuario where id_usuario = ?", (id,))
+
+        if not cur.fetchone():
+            return jsonify({"error": "Usuario nao encontrado"}), 404
+
+        data = request.get_json(silent=True)
+
+        if not data:
+            return jsonify({"error": "Formato de requisicao invalido"}), 400
+
+        email = limpar_email(data.get('email'))
+        nome = data.get('nome')
+        senha = data.get('senha')
+
+        if not email or not senha or not nome:
+            return jsonify({"error": "Email, nome e senha são obrigatorios"}), 400
+
+        # estou buscando pelo id do usuário que tenha o mesmo email informado na requisicao
+        cur.execute("SELECT id_usuario from usuario where email = ?", (email,))
+        usuario = cur.fetchone()
+
+        if usuario:
+            id_email_encontrado = usuario[0]
+
+            # se nao for encontrado email relacionado, passa aqui
+            # ou mesmo que encontrar, mas for outro usuario
+            if id_email_encontrado != id:
+                return jsonify({"error": "Email ja utilizado"})
+
+        cur.execute("UPDATE usuario SET email = ?, nome = ?, senha = ? WHERE id_usuario = ?",
+                    (email, nome, criptografar(senha), id))
+
+        con.commit()
+
+        return jsonify({
+            "message": "Usuario atualizado com sucesso",
+            "usuario": {
+                "email": email,
+                "nome": nome,
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Houve um erro ao editar usuario: {e}"}), 500
+    finally:
+        cur.close()
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    try:
+        cur = con.cursor()
+        data = request.get_json(silent=True)
+
+        if not data:
+            return jsonify({"error": "Formato de requisicao invalido"}), 400
+
+        email = limpar_email(data.get('email'))
+        senha = data.get('senha')
+
+        if not email or not senha:
+            return jsonify({"error": "Email e senha são obrigatorios"}), 400
+
+        cur.execute("SELECT senha from usuario WHERE email = ?", (email,))
+
+        senha_criptografada = cur.fetchone()[0]
+
+        if not senha_criptografada:
+            return jsonify({"error": "Usuario nao encontrado"}), 404
+
+        if not senha_correta(senha_criptografada, senha):
+            return jsonify({"error": "Senha incorreta"}), 401
+
+        return jsonify({"message": "Login realizado"}), 200
+    except Exception as e:
+        return jsonify({"error": f"Houve um erro ao fazer login {e}"}), 500
+    finally:
+        cur.close()
+
+@app.route('/deletar_usuario/<int:id>', methods=['DELETE'])
+def deletar_usuario(id):
+    try:
+        cur = con.cursor()
+
+        if not id:
+            return jsonify({"error": "Formato invalido, informe um id"}), 400
+
+        cur.execute("select 1 from usuario where id_usuario = ?", (id,))
+
+        if not cur.fetchone():
+            return jsonify({"error": "Usuario nao encontrado"}), 404
+
+        cur.execute("delete from usuario where id_usuario = ?", (id,))
+        con.commit()
+
+        return jsonify({"message": "Usuario excluido com sucesso"}), 200
+    except Exception as e:
+        return jsonify({"error": f"Houve um erro ao fazer login {e}"}), 500
     finally:
         cur.close()
