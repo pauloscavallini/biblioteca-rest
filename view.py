@@ -1,4 +1,6 @@
 import os
+import threading
+
 from flask import jsonify, request, send_file, Response
 from fpdf import FPDF
 from funcao import *
@@ -341,3 +343,19 @@ def grafico():
         return jsonify({"error": "Erro ao consultar banco de dados"}), 500
     finally:
         cur.close()
+
+@app.route('/enviar_email', methods=["POST"])
+def enviar_email():
+    try:
+        dados = request.get_json()
+        assunto = dados["subject"]
+        mensagem = dados["message"]
+        destinatario = dados["to"]
+
+        thread = threading.Thread(target=envio_email, args=(destinatario, assunto, mensagem))
+
+        thread.start()
+
+        return jsonify({"message": "E-mail enviado com sucesso"}), 200
+    except Exception as e:
+        return jsonify({"message": "Houve um erro ao enviar e-mail"}), 500
