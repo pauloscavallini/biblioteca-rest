@@ -1,4 +1,5 @@
-from flask import Flask, jsonify, request
+from flask import jsonify, request, send_file
+from fpdf import FPDF
 from funcao import *
 from main import app, con
 
@@ -267,5 +268,40 @@ def deletar_usuario(id):
         return jsonify({"message": "Usuario excluido com sucesso"}), 200
     except Exception as e:
         return jsonify({"error": f"Houve um erro ao fazer login {e}"}), 500
+    finally:
+        cur.close()
+
+
+@app.route('/relatorio_livros', methods=['GET'])
+def relatorio_livros():
+    try:
+        cur = con.cursor()
+        cur.execute("SELECT ID_LIVRO, TITULO, AUTOR, ANO_PUBLICACAO FROM LIVRO l ")
+        livros = cur.fetchall()
+
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+        pdf.set_font("Arial", style='B', size=16)
+        pdf.cell(200, 10, "Relatorio de Livros", ln=True, align='C')
+
+        pdf.ln(5)  # Espaço entre o título e a linha
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())  # Linha abaixo do título
+        pdf.ln(5)  # Espaço após a linha
+
+        pdf.set_font("Arial", size=12)
+        for livro in livros:
+            pdf.cell(200, 10, f"ID: {livro[0]} - {livro[1]} - {livro[2]} - {livro[3]}", ln=True)
+
+        contador_livros = len(livros)
+        pdf.ln(10)
+        pdf.set_font("Arial", style='B', size=12)
+        pdf.cell(200, 10, f"Total de livros cadastrados: {contador_livros}", ln=True, align='C')
+
+        pdf_path = "relatorio_livros.pdf"
+        pdf.output(pdf_path)
+        return send_file(pdf_path, as_attachment=True, mimetype='application/pdf')
+    except Exception as e:
+        return jsonify({"error": "Houve um erro ao gerar pdf"}), 500
     finally:
         cur.close()
