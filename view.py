@@ -1,8 +1,12 @@
-from flask import jsonify, request, send_file
+import os
+from flask import jsonify, request, send_file, Response
 from fpdf import FPDF
 from funcao import *
 from main import app, con
+import pygal
 
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
 
 @app.route('/listar_livros', methods=['GET'])
 def listar_livro():
@@ -30,11 +34,10 @@ def listar_livro():
 @app.route('/criar_livro', methods=['POST'])
 def criar_livro():
     try:
-        data = request.get_json()
-
-        titulo = data.get('titulo')
-        autor = data.get('autor')
-        ano_publicacao = data.get('ano_publicacao')
+        titulo = request.form.get('titulo')
+        autor = request.form.get('autor')
+        ano_publicacao = request.form.get('ano_publicacao')
+        imagem = request.files.get('imagem')
 
         cur = con.cursor()
         cur.execute("SELECT 1 FROM LIVRO WHERE TITULO = ?", (titulo,))
@@ -42,9 +45,19 @@ def criar_livro():
             return jsonify({"error": "Livro ja cadastrado"}), 400
 
         cur.execute("""INSERT INTO LIVRO (titulo, autor, ano_publicacao)
-        VALUES (?, ?, ?)""", (titulo, autor, ano_publicacao))
+        VALUES (?, ?, ?) RETURNING id_livro""", (titulo, autor, ano_publicacao))
 
+        codigo_livro = cur.fetchone()[0]
         con.commit()
+
+        caminho_imagem = None
+
+        if imagem:
+            nome_imagem = f"{codigo_livro}.jpg"
+            caminho_imagem_destino = os.path.join(app.config['UPLOAD_FOLDER'], "Livros")
+            os.makedirs(caminho_imagem_destino, exist_ok=True)
+            caminho_imagem = os.path.join(caminho_imagem_destino, nome_imagem)
+            imagem.save(caminho_imagem)
 
         return jsonify({
             "message": "Livro cadastrado com sucesso",
@@ -303,5 +316,28 @@ def relatorio_livros():
         return send_file(pdf_path, as_attachment=True, mimetype='application/pdf')
     except Exception as e:
         return jsonify({"error": "Houve um erro ao gerar pdf"}), 500
+    finally:
+        cur.close()
+
+@app.route('/grafico', methods=['GET'])
+def grafico():
+    try:
+        cur = con.cursor()
+        cur.execute("""select ano_publicacao, count(*)
+                           from livro
+                           group by ano_publicacao
+                           order by ano_publicacao
+            """)
+
+        resultado = cur.fetchall()
+
+        grafico = pygal.Bar()
+        grafico.title = "Quantidade de livros por ano de publicação"
+
+        for i in resultado:
+            grafico.add(str(i[0]), i[1])
+        return Response(grafico.render(), mimetype='image/svg+xml')
+    except Exception as e:
+        return jsonify({"error": "Erro ao consultar banco de dados"}), 500
     finally:
         cur.close()

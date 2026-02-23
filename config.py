@@ -1,3 +1,5 @@
+import os.path
+
 SECRET_KEY = 'chave-secreta'
 DEBUG = True
 
@@ -7,3 +9,4 @@ DB_NAME = r'C:\Users\Aluno\Desktop\PauloH\api-rest\BANCO\BANCO.FDB'
 DB_USER = 'sysdba'
 DB_PASSWORD = 'sysdba'
 
+UPLOAD_FOLDER = os.path.abspath(os.path.dirname(__file__))
