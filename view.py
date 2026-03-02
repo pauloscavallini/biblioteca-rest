@@ -359,3 +359,4 @@ def enviar_email():
         return jsonify({"message": "E-mail enviado com sucesso"}), 200
     except Exception as e:
         return jsonify({"message": "Houve um erro ao enviar e-mail"}), 500
+

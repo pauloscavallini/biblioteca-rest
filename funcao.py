@@ -40,7 +40,7 @@ def envio_email(destinatario, assunto, mensagem):
     msg['From'] = user
     msg['To'] = destinatario
 
-    server = smtplib.SMTP('smtp.gmail', 587)
+    server = smtplib.SMTP('smtp.gmail.com', 587)
     server.starttls()
     server.login(user, senha)
     server.send_message(msg)
