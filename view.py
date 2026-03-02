@@ -1,6 +1,7 @@
 import os
 import threading
 
+import jwt
 from flask import jsonify, request, send_file, Response
 from fpdf import FPDF
 from funcao import *
@@ -12,6 +13,20 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
 
 @app.route('/listar_livros', methods=['GET'])
 def listar_livro():
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({"error": "Token de autenticacao necessario"}), 401
+
+    token = remove_bearer(token)
+
+    try:
+        payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        id_usuario = payload['id_usuario']
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "Token invalid"}), 401
+
     try:
         cur = con.cursor()
         cur.execute("SELECT id_livro, titulo, autor, ano_publicacao FROM livro")
@@ -248,9 +263,11 @@ def login():
         if not email or not senha:
             return jsonify({"error": "Email e senha são obrigatorios"}), 400
 
-        cur.execute("SELECT senha from usuario WHERE email = ?", (email,))
+        cur.execute("SELECT id_usuario, senha from usuario WHERE email = ?", (email,))
 
-        senha_criptografada = cur.fetchone()[0]
+        user_encontrado = cur.fetchone()
+        id_usuario = user_encontrado[0]
+        senha_criptografada = user_encontrado[1]
 
         if not senha_criptografada:
             return jsonify({"error": "Usuario nao encontrado"}), 404
@@ -258,7 +275,9 @@ def login():
         if not senha_correta(senha_criptografada, senha):
             return jsonify({"error": "Senha incorreta"}), 401
 
-        return jsonify({"message": "Login realizado"}), 200
+        token = gerar_token(id_usuario)
+
+        return jsonify({"message": "Login realizado", "token": token}), 200
     except Exception as e:
         return jsonify({"error": f"Houve um erro ao fazer login {e}"}), 500
     finally:
@@ -359,4 +378,6 @@ def enviar_email():
         return jsonify({"message": "E-mail enviado com sucesso"}), 200
     except Exception as e:
         return jsonify({"message": "Houve um erro ao enviar e-mail"}), 500
+
+
 
