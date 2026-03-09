@@ -2,7 +2,7 @@ import os
 import threading
 
 import jwt
-from flask import jsonify, request, send_file, Response
+from flask import jsonify, request, send_file, Response, make_response
 from fpdf import FPDF
 from funcao import *
 from main import app, con
@@ -50,6 +50,20 @@ def listar_livro():
 
 @app.route('/criar_livro', methods=['POST'])
 def criar_livro():
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({"error": "Token de autenticacao necessario"}), 401
+
+    token = remove_bearer(token)
+
+    try:
+        payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        id_usuario = payload['id_usuario']
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "Token invalid"}), 401
+
     try:
         titulo = request.form.get('titulo')
         autor = request.form.get('autor')
@@ -277,9 +291,18 @@ def login():
 
         token = gerar_token(id_usuario)
 
-        return jsonify({"message": "Login realizado", "token": token}), 200
+        resp = make_response(jsonify({"mensagem": "Logado com sucesso"}), 200)
+        resp.set_cookie("access_token", token,
+                        httponly=True,
+                        secure=False,
+                        samesite="Lax",
+                        path="/",
+                        max_age=3600,
+                        )
+
+        return resp
     except Exception as e:
-        return jsonify({"error": f"Houve um erro ao fazer login {e}"}), 500
+        return jsonify({"error": f"Houve um erro ao fazer login: {e}"}), 500
     finally:
         cur.close()
 

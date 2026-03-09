@@ -2,7 +2,6 @@ from flask_bcrypt import generate_password_hash, check_password_hash
 from email.mime.text import MIMEText
 import datetime
 import jwt
-import threading
 import smtplib
 import re
 from main import app
@@ -54,7 +53,7 @@ def envio_email(destinatario, assunto, mensagem):
 def gerar_token(id_usuario):
     payload = {
         'id_usuario': id_usuario,
-        'timestamp': datetime.datetime.utcnow().isoformat(),
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=1),
     }
 
     token = jwt.encode(payload, senha_secreta, algorithm='HS256')
